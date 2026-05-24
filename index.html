@@ -5,6 +5,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Video Assembler — Paste n8n Output</title>
+  <!-- Enables SharedArrayBuffer (required for FFmpeg.wasm) without needing server headers -->
+  <script src="https://cdn.jsdelivr.net/npm/coi-serviceworker/coi-serviceworker.min.js"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;700;800&display=swap');
 
@@ -563,7 +565,7 @@
         <div class="options-grid" style="margin-bottom:12px;">
           <div class="option-group" style="grid-column:1/-1;">
             <label>n8n Webhook URL</label>
-            <input type="text" id="webhook-url" value="https://fepijo4826.app.n8n.cloud/webhook/generate-video"
+            <input type="text" id="webhook-url" value="https://naveen36400000.app.n8n.cloud/webhook/generate-video"
               style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:12px;padding:8px 10px;outline:none;" />
           </div>
           <div class="option-group">
@@ -1084,11 +1086,21 @@ CMD ["python", "app.py"]</pre>
       addLog(`Triggering n8n webhook: "${topic}" (${duration}s)...`);
 
       try {
-        const res = await fetch(webhookUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ topic, duration_seconds: parseInt(duration) })
-        });
+        let res;
+        try {
+          res = await fetch(webhookUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ topic, duration_seconds: parseInt(duration) })
+          });
+        } catch (err) {
+          addLog('Direct webhook failed (CORS?), trying proxy without preflight...', 'warn');
+          res = await fetch(`https://corsproxy.io/?${encodeURIComponent(webhookUrl)}`, {
+            method: 'POST',
+            // Omit Content-Type: application/json to bypass the OPTIONS preflight request
+            body: JSON.stringify({ topic, duration_seconds: parseInt(duration) })
+          });
+        }
 
         if (!res.ok) throw new Error(`HTTP ${res.status} — check your webhook URL`);
 
