@@ -1294,15 +1294,21 @@ CMD ["python", "app.py"]</pre>
         addLog(`Scene ${scene.scene_number}: fetching ${scene.video_url.split('/').slice(-1)[0]}...`);
 
         try {
-          // Fetch video directly (Pexels supports CORS), fallback to corsproxy
+          // Fetch video directly (Pexels supports CORS), fallback to proxies
           let res2;
           try {
             res2 = await fetch(scene.video_url);
             if (!res2.ok) throw new Error('direct fetch failed');
           } catch (e) {
-            addLog(`Direct fetch failed, trying CORS proxy...`, 'warn');
-            res2 = await fetch(`https://corsproxy.io/?${encodeURIComponent(scene.video_url)}`);
-            if (!res2.ok) throw new Error('HTTP ' + res2.status);
+            addLog(`Direct fetch failed, trying CORS proxy (corsproxy.io)...`, 'warn');
+            try {
+              res2 = await fetch(`https://corsproxy.io/?${encodeURIComponent(scene.video_url)}`);
+              if (!res2.ok) throw new Error('HTTP ' + res2.status);
+            } catch (err2) {
+              addLog(`corsproxy.io failed, trying allorigins.win proxy...`, 'warn');
+              res2 = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(scene.video_url)}`);
+              if (!res2.ok) throw new Error('HTTP ' + res2.status);
+            }
           }
           const buf = await res2.arrayBuffer();
           const inName = `in_${i}.mp4`;
