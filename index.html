@@ -1,0 +1,1135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Video Assembler — Paste n8n Output</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;700;800&display=swap');
+
+  :root {
+    --bg: #0a0a0f;
+    --surface: #111118;
+    --card: #16161f;
+    --border: #2a2a3a;
+    --accent: #7c5cfc;
+    --accent2: #fc5c7d;
+    --gold: #f0c040;
+    --text: #e8e8f0;
+    --muted: #6868a0;
+    --success: #40e0a0;
+    --warning: #f0c040;
+    --error: #fc5c7d;
+    --mono: 'DM Mono', monospace;
+    --sans: 'Syne', sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { background: var(--bg); color: var(--text); font-family: var(--sans); }
+  body { min-height: 100vh; padding: 0; overflow-x: hidden; }
+
+  /* Grid background */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image:
+      linear-gradient(var(--border) 1px, transparent 1px),
+      linear-gradient(90deg, var(--border) 1px, transparent 1px);
+    background-size: 40px 40px;
+    opacity: 0.3;
+    pointer-events: none;
+  }
+
+  .header {
+    padding: 40px 40px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 16px;
+  }
+  .logo {
+    width: 40px; height: 40px; border-radius: 10px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; flex-shrink: 0;
+  }
+  .header h1 { font-size: 22px; font-weight: 800; letter-spacing: -0.5px; }
+  .header p { font-size: 13px; color: var(--muted); margin-top: 2px; }
+
+  .main { max-width: 1100px; margin: 0 auto; padding: 40px; }
+
+  .step-row {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 32px;
+  }
+  @media(max-width:760px){ .step-row { grid-template-columns: 1fr; } }
+
+  .panel {
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 16px; overflow: hidden;
+  }
+  .panel-header {
+    padding: 16px 20px; border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .step-badge {
+    width: 24px; height: 24px; border-radius: 50%;
+    background: var(--accent); color: #fff;
+    font-size: 12px; font-weight: 700; font-family: var(--mono);
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .panel-header h2 { font-size: 14px; font-weight: 700; }
+  .panel-body { padding: 20px; }
+
+  textarea {
+    width: 100%; height: 220px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; color: var(--text);
+    font-family: var(--mono); font-size: 12px; line-height: 1.6;
+    padding: 14px; resize: vertical; outline: none;
+    transition: border-color 0.2s;
+  }
+  textarea:focus { border-color: var(--accent); }
+  textarea::placeholder { color: var(--muted); }
+
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 12px 24px; border-radius: 10px;
+    font-family: var(--sans); font-size: 14px; font-weight: 700;
+    cursor: pointer; border: none; transition: all 0.2s;
+    text-decoration: none;
+  }
+  .btn-primary {
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    color: #fff;
+  }
+  .btn-primary:hover { opacity: 0.85; transform: translateY(-1px); }
+  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+  .btn-outline {
+    background: transparent; color: var(--text);
+    border: 1px solid var(--border);
+  }
+  .btn-outline:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* Scene list */
+  .scene-list { display: flex; flex-direction: column; gap: 10px; }
+  .scene-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px 16px;
+    display: grid; grid-template-columns: 36px 1fr auto;
+    gap: 12px; align-items: start;
+    transition: border-color 0.2s;
+  }
+  .scene-card.done { border-color: var(--success); }
+  .scene-card.error { border-color: var(--error); }
+  .scene-card.active { border-color: var(--accent); }
+  .scene-num {
+    width: 36px; height: 36px; border-radius: 8px;
+    background: var(--card); border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--mono); font-size: 13px; font-weight: 500;
+    color: var(--muted); flex-shrink: 0;
+  }
+  .scene-info h3 { font-size: 13px; font-weight: 700; margin-bottom: 3px; }
+  .scene-info p { font-size: 11px; color: var(--muted); line-height: 1.4; }
+  .scene-tag {
+    font-size: 10px; font-family: var(--mono);
+    padding: 3px 8px; border-radius: 20px;
+    background: var(--card); color: var(--muted); border: 1px solid var(--border);
+    white-space: nowrap; align-self: center;
+  }
+  .scene-tag.ok { background: #40e0a022; color: var(--success); border-color: var(--success); }
+  .scene-tag.working { background: #7c5cfc22; color: var(--accent); border-color: var(--accent); animation: pulse 1s ease infinite; }
+  .scene-tag.fail { background: #fc5c7d22; color: var(--error); border-color: var(--error); }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.6} }
+
+  /* Log terminal */
+  .terminal {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px;
+    font-family: var(--mono); font-size: 12px; line-height: 1.8;
+    height: 200px; overflow-y: auto; color: #88ff88;
+  }
+  .log-line { opacity: 0; animation: fadeIn 0.3s forwards; }
+  @keyframes fadeIn { to { opacity: 1; } }
+  .log-warn { color: var(--warning); }
+  .log-error { color: var(--error); }
+  .log-info { color: var(--muted); }
+
+  /* Progress */
+  .progress-wrap { margin: 16px 0; }
+  .progress-label {
+    display: flex; justify-content: space-between;
+    font-size: 12px; font-family: var(--mono); margin-bottom: 8px; color: var(--muted);
+  }
+  .progress-bar {
+    height: 4px; background: var(--border); border-radius: 2px; overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%; width: 0%; border-radius: 2px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    transition: width 0.4s ease;
+  }
+
+  /* Result card */
+  .result-card {
+    background: #40e0a011; border: 1px solid var(--success);
+    border-radius: 16px; padding: 24px; text-align: center;
+    display: none;
+  }
+  .result-card.visible { display: block; }
+  .result-icon { font-size: 48px; margin-bottom: 12px; }
+  .result-card h2 { font-size: 22px; font-weight: 800; margin-bottom: 6px; }
+  .result-card p { color: var(--muted); font-size: 14px; margin-bottom: 20px; }
+  .result-actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+
+  /* Options row */
+  .options-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px;
+  }
+  .option-group label {
+    font-size: 11px; font-family: var(--mono); color: var(--muted);
+    display: block; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  select, input[type=range] {
+    width: 100%; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; color: var(--text); font-family: var(--mono);
+    font-size: 12px; padding: 8px 10px; outline: none; appearance: none;
+    cursor: pointer;
+  }
+  select:focus { border-color: var(--accent); }
+
+  .info-box {
+    background: #7c5cfc11; border: 1px solid #7c5cfc44;
+    border-radius: 10px; padding: 14px 16px;
+    font-size: 12px; color: var(--muted); line-height: 1.7;
+    margin-bottom: 16px;
+  }
+  .info-box strong { color: var(--text); }
+
+  .divider { border: none; border-top: 1px solid var(--border); margin: 32px 0; }
+
+  /* Thumbnail strip */
+  .thumb-strip { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
+  .thumb-item { position: relative; border-radius: 8px; overflow: hidden; }
+  .thumb-item img {
+    width: 80px; height: 50px; object-fit: cover; display: block;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+  .thumb-overlay {
+    position: absolute; bottom: 0; left: 0; right: 0;
+    background: linear-gradient(transparent, rgba(0,0,0,0.8));
+    color: #fff; font-size: 9px; font-family: var(--mono);
+    padding: 3px 5px; text-align: center;
+  }
+
+  .full-width { grid-column: 1 / -1; }
+  .mt { margin-top: 16px; }
+  .flex-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="logo">🎬</div>
+  <div>
+    <h1>Video Assembler</h1>
+    <p>Paste your n8n agent JSON → get a real MP4 in your browser. No server needed.</p>
+  </div>
+</div>
+
+<div class="main">
+
+  <!-- INFO -->
+  <div class="info-box">
+    <strong>How it works:</strong> This page uses <strong>FFmpeg.wasm</strong> — FFmpeg compiled to WebAssembly — running 100% in your browser. It downloads each Pexels clip, trims it, applies your color grade, burns in text overlays, then concatenates everything into a single MP4. <strong>No uploads. No cost. Runs entirely in your browser.</strong> AI voiceover requires a server — disable it if not available.
+  </div>
+
+  <!-- n8n WEBHOOK TRIGGER -->
+  <div class="panel" style="margin-bottom:24px;">
+    <div class="panel-header">
+      <div class="step-badge" style="background:linear-gradient(135deg,#f77f00,#fc5c7d);">⚡</div>
+      <div>
+        <h2>Generate Video Script via n8n</h2>
+        <p style="font-size:12px;color:var(--muted);margin-top:2px;">Triggers your n8n workflow → auto-fills the JSON below</p>
+      </div>
+    </div>
+    <div class="panel-body">
+      <div class="options-grid" style="margin-bottom:12px;">
+        <div class="option-group" style="grid-column:1/-1;">
+          <label>n8n Webhook URL</label>
+          <input type="text" id="webhook-url"
+            value="https://fepijo4826.app.n8n.cloud/webhook/generate-video"
+            style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:12px;padding:8px 10px;outline:none;" />
+        </div>
+        <div class="option-group">
+          <label>Video Topic / Prompt</label>
+          <input type="text" id="webhook-topic" placeholder="e.g. Never give up on your dreams"
+            style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:12px;padding:8px 10px;outline:none;" />
+        </div>
+        <div class="option-group">
+          <label>Duration (seconds)</label>
+          <select id="webhook-duration" style="width:100%;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:12px;padding:8px 10px;outline:none;">
+            <option value="30">30s</option>
+            <option value="60" selected>60s</option>
+            <option value="90">90s</option>
+            <option value="120">120s</option>
+          </select>
+        </div>
+      </div>
+      <div class="flex-row">
+        <button class="btn btn-primary" id="webhook-btn" onclick="triggerWebhook()">⚡ Generate Script</button>
+        <span id="webhook-status" style="font-size:12px;color:var(--muted);"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- STEP 1 + 2 -->
+  <div class="step-row">
+
+    <!-- Paste JSON -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="step-badge">1</div>
+        <div>
+          <h2>Paste n8n Agent Output</h2>
+        </div>
+      </div>
+      <div class="panel-body">
+        <textarea id="json-input" placeholder='Paste the full JSON array from your n8n workflow here...
+[{ "title": "Rise from the Ashes", "production_scenes": [...], ... }]'></textarea>
+        <div class="flex-row mt">
+          <button class="btn btn-primary" onclick="parseJSON()">Parse & Preview</button>
+          <button class="btn btn-outline" onclick="loadSample()">Load Sample</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Options -->
+    <div class="panel">
+      <div class="panel-header">
+        <div class="step-badge">2</div>
+        <div><h2>Assembly Options</h2></div>
+      </div>
+      <div class="panel-body">
+        <div class="options-grid">
+          <div class="option-group">
+            <label>Output resolution</label>
+            <select id="opt-res">
+              <option value="1280x720">1280×720 HD</option>
+              <option value="1920x1080" selected>1920×1080 Full HD</option>
+              <option value="3840x2160">3840×2160 4K</option>
+            </select>
+          </div>
+          <div class="option-group">
+            <label>Framerate</label>
+            <select id="opt-fps">
+              <option value="24">24 fps (cinematic)</option>
+              <option value="30" selected>30 fps (standard)</option>
+              <option value="60">60 fps (smooth)</option>
+            </select>
+          </div>
+          <div class="option-group">
+            <label>Text overlay style</label>
+            <select id="opt-text">
+              <option value="bold">Bold white + black shadow</option>
+              <option value="minimal">Minimal lowercase</option>
+              <option value="none">No text overlays</option>
+            </select>
+          </div>
+          <div class="option-group">
+            <label>Apply color grade</label>
+            <select id="opt-grade">
+              <option value="auto" selected>Auto (from JSON)</option>
+              <option value="warm">Warm golden</option>
+              <option value="cool">Cool cinematic</option>
+              <option value="none">None</option>
+            </select>
+          </div>
+          <div class="option-group">
+            <label>AI Voiceover</label>
+            <div style="display:flex; gap:8px; align-items:center;">
+              <select id="opt-voice" style="flex:1">
+                <option value="Kore">Kore (Female, firm)</option>
+                <option value="Aoede">Aoede (Female, breezy)</option>
+                <option value="Leda">Leda (Female, youthful)</option>
+                <option value="Zephyr">Zephyr (Female, bright)</option>
+                <option value="Puck">Puck (Male, upbeat)</option>
+                <option value="Charon">Charon (Male, informative)</option>
+                <option value="Fenrir">Fenrir (Male, excitable)</option>
+                <option value="Orus">Orus (Male, confident)</option>
+              </select>
+              <input type="checkbox" id="opt-tts" style="width:20px; height:20px;">
+            </div>
+          </div>
+          <div class="option-group">
+            <label>Music & Captions</label>
+            <div style="display:flex; gap:12px; align-items:center; font-size:12px;">
+              <label style="display:flex; align-items:center; gap:4px; font-weight:normal;">
+                <input type="checkbox" id="opt-captions" checked> Captions
+              </label>
+              <label style="display:flex; align-items:center; gap:4px; font-weight:normal;">
+                <input type="checkbox" id="opt-bg-music" checked> Music
+              </label>
+            </div>
+          </div>
+        </div>
+        <div class="info-box" style="margin-bottom:12px;">
+          <strong>Gemini TTS (gemini-2.5-flash-preview-tts)</strong> — Enable AI Voiceover above and paste your API key:
+          <div style="display:flex;gap:8px;margin-top:8px;">
+            <input type="password" id="gemini-api-key" placeholder="AIza... (Google AI Studio API key)" style="flex:1;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:12px;padding:8px 10px;outline:none;" />
+          </div>
+          <div style="margin-top:6px;font-size:11px;">Get a free key at <a href="https://aistudio.google.com/apikey" target="_blank" style="color:var(--accent)">aistudio.google.com/apikey</a></div>
+        </div>
+        <div class="info-box" style="margin:0">
+          <strong>Note:</strong> FFmpeg.wasm loads ~32MB on first run. Assembly time depends on total video duration and your device speed.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scene preview -->
+  <div class="panel" id="scene-panel" style="display:none; margin-bottom:24px;">
+    <div class="panel-header">
+      <div class="step-badge">3</div>
+      <div><h2>Scene Preview</h2></div>
+    </div>
+    <div class="panel-body">
+      <div id="video-meta" style="margin-bottom:16px;"></div>
+      <div class="scene-list" id="scene-list"></div>
+      <div class="thumb-strip" id="thumb-strip"></div>
+      <div class="flex-row mt">
+        <button class="btn btn-primary" id="assemble-btn" onclick="startAssembly()" disabled>
+          ⚙ Assemble Video
+        </button>
+        <span id="assemble-note" style="font-size:12px;color:var(--muted)">Loading FFmpeg.wasm...</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Assembly log -->
+  <div class="panel" id="log-panel" style="display:none; margin-bottom:24px;">
+    <div class="panel-header">
+      <div class="step-badge">4</div>
+      <div><h2>Assembly Log</h2></div>
+    </div>
+    <div class="panel-body">
+      <div class="progress-wrap">
+        <div class="progress-label">
+          <span id="progress-label">Initializing...</span>
+          <span id="progress-pct">0%</span>
+        </div>
+        <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+      </div>
+      <div class="terminal" id="terminal"></div>
+    </div>
+  </div>
+
+  <!-- Result -->
+  <div class="result-card" id="result-card">
+    <div class="result-icon">🎉</div>
+    <h2>Video Ready!</h2>
+    <p id="result-desc">Your motivational video has been assembled successfully.</p>
+    <div class="result-actions">
+      <a class="btn btn-primary" id="download-link" download="motivational_video.mp4">⬇ Download MP4</a>
+      <button class="btn btn-outline" onclick="reset()">← Assemble Another</button>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <!-- Path A instructions -->
+  <div class="panel">
+    <div class="panel-header">
+      <div class="step-badge" style="background:var(--accent2)">A</div>
+      <div><h2>Alternative: n8n → Railway FFmpeg (server-side, also free)</h2></div>
+    </div>
+    <div class="panel-body">
+      <p style="font-size:13px;color:var(--muted);margin-bottom:16px;line-height:1.7">
+        For fully automated video generation (no browser needed), deploy a free Flask + FFmpeg service on Railway.
+        Your n8n workflow calls it via HTTP Request node and gets back a video URL.
+      </p>
+      <details style="font-size:13px;">
+        <summary style="cursor:pointer;font-weight:700;margin-bottom:12px;color:var(--accent)">Show Railway setup steps</summary>
+        <div style="margin-top:12px;">
+          <p style="color:var(--muted);margin-bottom:8px;line-height:1.7"><strong style="color:var(--text)">Step 1</strong> — Create a free account at <strong>railway.app</strong> (500 hrs/month free)</p>
+          <p style="color:var(--muted);margin-bottom:8px;line-height:1.7"><strong style="color:var(--text)">Step 2</strong> — Deploy this one-click template: New Project → Deploy from GitHub → paste your repo with the Flask app below</p>
+          <p style="color:var(--muted);margin-bottom:8px;line-height:1.7"><strong style="color:var(--text)">Step 3</strong> — Add an HTTP Request node at the end of your n8n workflow that POSTs your <code style="background:var(--surface);padding:2px 6px;border-radius:4px;font-family:var(--mono)">production_scenes</code> JSON to your Railway URL</p>
+          <p style="color:var(--muted);margin-bottom:16px;line-height:1.7"><strong style="color:var(--text)">Step 4</strong> — Railway returns a signed URL to the finished MP4 stored in a free Cloudflare R2 bucket</p>
+
+          <p style="font-weight:700;margin-bottom:8px;color:var(--text)">Flask app (app.py):</p>
+          <pre style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;font-family:var(--mono);font-size:11px;line-height:1.8;overflow-x:auto;color:#88ff88;">from flask import Flask, request, jsonify
+import subprocess, os, uuid, requests, tempfile
+
+app = Flask(__name__)
+
+@app.route('/assemble', methods=['POST'])
+def assemble():
+    data = request.json
+    scenes = data['production_scenes']
+    color_filter = data.get('ffmpeg_color_filter',
+        'eq=brightness=0.06:saturation=1.4:contrast=1.1')
+    job_id = str(uuid.uuid4())[:8]
+    tmpdir = tempfile.mkdtemp()
+    clips = []
+
+    for i, scene in enumerate(scenes):
+        url = scene.get('video_url')
+        if not url:
+            continue
+        out = f"{tmpdir}/clip_{i:02d}.mp4"
+        # Download
+        r = requests.get(url, timeout=30)
+        raw = f"{tmpdir}/raw_{i:02d}.mp4"
+        open(raw, 'wb').write(r.content)
+        # Trim + grade
+        duration = scene.get('duration_seconds', 8)
+        overlay = scene.get('text_overlay', '')
+        vf = color_filter
+        if overlay:
+            vf += f",drawtext=text='{overlay}':fontsize=52:fontcolor=white:x=(w-text_w)/2:y=h-120:shadowcolor=black:shadowx=2:shadowy=2"
+        subprocess.run([
+            'ffmpeg', '-y', '-i', raw,
+            '-t', str(duration), '-vf', vf,
+            '-c:v', 'libx264', '-preset', 'fast', out
+        ], check=True, capture_output=True)
+        clips.append(out)
+
+    # Concat
+    list_file = f"{tmpdir}/list.txt"
+    with open(list_file, 'w') as f:
+        for c in clips:
+            f.write(f"file '{c}'\n")
+    final = f"{tmpdir}/final_{job_id}.mp4"
+    subprocess.run([
+        'ffmpeg', '-y', '-f', 'concat', '-safe', '0',
+        '-i', list_file, '-c', 'copy', final
+    ], check=True, capture_output=True)
+
+    # Upload to R2 / return base64 for small files
+    with open(final, 'rb') as f:
+        import base64
+        b64 = base64.b64encode(f.read()).decode()
+    return jsonify({'status': 'ok', 'video_base64': b64, 'job_id': job_id})
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))</pre>
+
+          <p style="font-weight:700;margin:16px 0 8px;color:var(--text)">Dockerfile:</p>
+          <pre style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;font-family:var(--mono);font-size:11px;line-height:1.8;overflow-x:auto;color:#88ff88;">FROM python:3.11-slim
+RUN apt-get update && apt-get install -y ffmpeg && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install flask requests
+COPY app.py .
+CMD ["python", "app.py"]</pre>
+          <p style="font-size:11px;color:var(--muted);margin-top:8px">Then in n8n: HTTP Request → POST → https://your-app.railway.app/assemble → Body: your full JSON package</p>
+        </div>
+      </details>
+    </div>
+  </div>
+
+</div>
+
+<!-- FFmpeg.wasm -->
+<script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
+<script>
+const { createFFmpeg, fetchFile } = FFmpeg;
+const ffmpeg = createFFmpeg({
+  log: false,
+  corePath: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js'
+});
+
+let parsedData = null;
+let ffmpegReady = false;
+let geminiApiKey = '';
+
+// Gemini 2.5 Flash TTS — returns ArrayBuffer (WAV)
+async function geminiTTS(text, voiceName, apiKey) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key=${apiKey}`;
+  const body = {
+    contents: [{ parts: [{ text }] }],
+    generationConfig: {
+      responseModalities: ['AUDIO'],
+      speechConfig: {
+        voiceConfig: {
+          prebuiltVoiceConfig: { voiceName }
+        }
+      }
+    }
+  };
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err?.error?.message || `HTTP ${res.status}`);
+  }
+  const json = await res.json();
+  const b64 = json.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+  if (!b64) throw new Error('No audio data in Gemini response');
+
+  // Gemini returns raw PCM (audio/L16, 24000Hz, mono) — wrap in WAV header
+  const pcm = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+  return pcmToWav(pcm, 24000, 1, 16);
+}
+
+// Build a valid WAV ArrayBuffer from raw PCM bytes
+function pcmToWav(pcm, sampleRate, numChannels, bitDepth) {
+  const dataLen = pcm.length;
+  const buf = new ArrayBuffer(44 + dataLen);
+  const view = new DataView(buf);
+  const writeStr = (off, str) => { for (let i = 0; i < str.length; i++) view.setUint8(off + i, str.charCodeAt(i)); };
+  writeStr(0, 'RIFF');
+  view.setUint32(4, 36 + dataLen, true);
+  writeStr(8, 'WAVE');
+  writeStr(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true); // PCM
+  view.setUint16(22, numChannels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, sampleRate * numChannels * bitDepth / 8, true);
+  view.setUint16(32, numChannels * bitDepth / 8, true);
+  view.setUint16(34, bitDepth, true);
+  writeStr(36, 'data');
+  view.setUint32(40, dataLen, true);
+  new Uint8Array(buf).set(pcm, 44);
+  return buf;
+}
+
+// Load FFmpeg in background
+(async () => {
+  try {
+    addLog('Loading FFmpeg.wasm (~32MB, one-time download)...', 'info');
+    await ffmpeg.load();
+    ffmpegReady = true;
+    addLog('FFmpeg.wasm ready.', 'ok');
+    const btn = document.getElementById('assemble-btn');
+    const note = document.getElementById('assemble-note');
+    if (parsedData) { btn.disabled = false; note.textContent = `${parsedData.scenes.length} scenes ready`; }
+    else note.textContent = 'Ready — paste JSON to begin';
+  } catch(e) {
+    addLog('FFmpeg load failed: ' + e.message, 'error');
+    document.getElementById('assemble-note').textContent = 'FFmpeg failed to load — try Chrome/Edge';
+  }
+})();
+
+const SAMPLE = [
+  {
+    "title": "Rise from the Ashes: Overcoming Failure",
+    "hook": "Failure isn't the end; it's the beginning of your greatest comeback.",
+    "full_script": "When you hit rock bottom, the only way is up. It feels like the world has stopped, like the dream is over. But that heaviness? That’s not a wall; it’s a foundation. Every mistake you’ve made is a lesson waiting to be applied. Don't let your past mistakes define your future. Instead, use them as fuel. The silence of the struggle is just the quiet before your storm of success begins. You are stronger than you think, and your perseverance is your superpower. Get back up, brush off the dust, and keep moving forward. The finish line isn't a place, it's the refusal to stop. Your story doesn't end with a setback; it continues with a comeback. Now, breathe in the strength you've gained, look forward, and go finish what you started.",
+    "call_to_action": "What will you conquer today? Share your comeback story below.",
+    "hashtags": [
+      "#motivation",
+      "#inspiration",
+      "#nevergiveup",
+      "#failuretosuccess",
+      "#growthmindset"
+    ],
+    "thumbnail_concept": "A split image: One side showing someone looking defeated in a dark room, and the other side showing the same person standing triumphantly on top of a mountain at sunrise.",
+    "total_duration_seconds": 60,
+    "total_scenes": 6,
+    "scenes_with_video": 6,
+    "scenes_missing_video": 0,
+    "coverage_pct": "100%",
+    "technical": {
+      "color_grade": "vibrant",
+      "music_mood": "epic",
+      "ffmpeg_color_filter": "eq=brightness=0.03:saturation=1.8:contrast=1.15",
+      "resolution": "1920x1080",
+      "fps": 30,
+      "format": "MP4 H.264"
+    },
+    "production_scenes": [
+      {
+        "scene_number": 1,
+        "duration_seconds": 10,
+        "narration": "When you hit rock bottom, the only way is up. It feels like the world has stopped, like the dream is over.",
+        "text_overlay": "FAILURE IS NOT THE END",
+        "emotion": "struggling",
+        "transition": "fade",
+        "pexels_search_query": "person failing exhausted",
+        "video_url": "https://videos.pexels.com/video-files/6799662/6799662-hd_1920_1080_30fps.mp4",
+        "video_id": 6799662,
+        "thumbnail": "https://images.pexels.com/videos/6799662/adult-african-ethnicity-analysis-analyze-6799662.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=630&w=1200",
+        "author": "Hanna Pad",
+        "resolution": "1920x1080",
+        "has_video": true
+      },
+      {
+        "scene_number": 2,
+        "duration_seconds": 10,
+        "narration": "But that heaviness? That’s not a wall; it’s a foundation. Every mistake you’ve made is a lesson waiting to be applied.",
+        "text_overlay": "MISTAKES ARE LESSONS",
+        "emotion": "struggling",
+        "transition": "dissolve",
+        "pexels_search_query": "person thinking deeply",
+        "video_url": "https://videos.pexels.com/video-files/8546034/8546034-hd_1080_2048_25fps.mp4",
+        "video_id": 8546034,
+        "thumbnail": "https://images.pexels.com/videos/8546034/asian-book-bindings-breakfast-business-8546034.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=1200&w=630",
+        "author": "www.kaboompics.com",
+        "resolution": "1080x1920",
+        "has_video": true
+      },
+      {
+        "scene_number": 3,
+        "duration_seconds": 10,
+        "narration": "Don't let your past mistakes define your future. Instead, use them as fuel. The silence of the struggle is just the quiet before your storm of success begins.",
+        "text_overlay": "TURN FAILURE INTO FUEL",
+        "emotion": "determined",
+        "transition": "cut",
+        "pexels_search_query": "athlete training hard",
+        "video_url": "https://videos.pexels.com/video-files/9944855/9944855-hd_1920_1080_24fps.mp4",
+        "video_id": 9944855,
+        "thumbnail": "https://images.pexels.com/videos/9944855/pexels-photo-9944855.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=630&w=1200",
+        "author": "KoolShooters",
+        "resolution": "1920x1080",
+        "has_video": true
+      },
+      {
+        "scene_number": 4,
+        "duration_seconds": 10,
+        "narration": "You are stronger than you think, and your perseverance is your superpower. Get back up, brush off the dust, and keep moving forward.",
+        "text_overlay": "YOUR PERSEVERANCE IS POWER",
+        "emotion": "rising",
+        "transition": "fade",
+        "pexels_search_query": "rising sun clouds",
+        "video_url": "https://videos.pexels.com/video-files/15050497/15050497-hd_1920_1080_30fps.mp4",
+        "video_id": 15050497,
+        "thumbnail": "https://images.pexels.com/videos/15050497/pexels-photo-15050497.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=630&w=1200",
+        "author": "William Chen",
+        "resolution": "1920x1080",
+        "has_video": true
+      },
+      {
+        "scene_number": 5,
+        "duration_seconds": 10,
+        "narration": "The finish line isn't a place, it's the refusal to stop. Your story doesn't end with a setback; it continues with a comeback.",
+        "text_overlay": "THE COMEBACK STARTS NOW",
+        "emotion": "triumphant",
+        "transition": "cut",
+        "pexels_search_query": "person running finish line",
+        "video_url": "https://videos.pexels.com/video-files/31229042/13338967_1080_1920_30fps.mp4",
+        "video_id": 31229042,
+        "thumbnail": "https://images.pexels.com/videos/31229042/pexels-photo-31229042.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=630&w=1200",
+        "author": "Mharee Lynn Eulanda Guillena",
+        "resolution": "1080x1920",
+        "has_video": true
+      },
+      {
+        "scene_number": 6,
+        "duration_seconds": 10,
+        "narration": "Now, breathe in the strength you've gained, look forward, and go finish what you started.",
+        "text_overlay": "GO FINISH IT",
+        "emotion": "peaceful",
+        "transition": "dissolve",
+        "pexels_search_query": "person smiling looking horizon",
+        "video_url": "https://videos.pexels.com/video-files/3571264/3571264-hd_1920_1080_30fps.mp4",
+        "video_id": 10493425,
+        "thumbnail": "https://images.pexels.com/videos/10493425/pexels-photo-10493425.jpeg?auto=compress&cs=tinysrgb&fit=crop&h=630&w=1200",
+        "author": "Ron Lach",
+        "resolution": "1920x1080",
+        "has_video": true
+      }
+    ]
+  }
+];
+
+async function triggerWebhook() {
+  const webhookUrl = document.getElementById('webhook-url').value.trim();
+  const topic = document.getElementById('webhook-topic').value.trim();
+  const duration = document.getElementById('webhook-duration').value;
+  const btn = document.getElementById('webhook-btn');
+  const status = document.getElementById('webhook-status');
+
+  if (!webhookUrl) { status.textContent = '⚠ Please enter your n8n webhook URL'; status.style.color = 'var(--error)'; return; }
+  if (!topic) { status.textContent = '⚠ Please enter a video topic'; status.style.color = 'var(--error)'; return; }
+
+  btn.disabled = true;
+  status.style.color = 'var(--accent)';
+  status.textContent = '⟳ Sending to n8n...';
+  addLog(`Triggering n8n webhook: "${topic}" (${duration}s)...`);
+
+  try {
+    const res = await fetch(webhookUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ topic, duration_seconds: parseInt(duration) })
+    });
+
+    if (!res.ok) throw new Error(`HTTP ${res.status} — check your webhook URL`);
+
+    // Try to parse JSON response from n8n
+    const text = await res.text();
+    let json;
+    try { json = JSON.parse(text); } catch(e) { throw new Error('n8n returned non-JSON. Check workflow output.'); }
+
+    // Accept array or object
+    const pretty = JSON.stringify(Array.isArray(json) ? json : [json], null, 2);
+    document.getElementById('json-input').value = pretty;
+    status.style.color = 'var(--success)';
+    status.textContent = '✓ Script received — parsing...';
+    addLog('n8n webhook responded ✓ — auto-parsing JSON...', 'ok');
+    parseJSON();
+  } catch(err) {
+    status.style.color = 'var(--error)';
+    status.textContent = '✗ ' + err.message;
+    addLog('Webhook error: ' + err.message, 'error');
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function loadSample() {
+  document.getElementById('json-input').value = JSON.stringify(SAMPLE, null, 2);
+  parseJSON();
+}
+
+function parseJSON() {
+  const raw = document.getElementById('json-input').value.trim();
+  try {
+    let data = JSON.parse(raw);
+    if (Array.isArray(data)) data = data[0];
+    if (!data.production_scenes) throw new Error('No production_scenes found');
+    parsedData = data;
+    renderPreview(data);
+    addLog(`Parsed: "${data.title}" — ${data.production_scenes.length} scenes, ${data.total_duration_seconds}s`, 'ok');
+  } catch(e) {
+    alert('JSON parse error: ' + e.message);
+  }
+}
+
+function renderPreview(data) {
+  const panel = document.getElementById('scene-panel');
+  panel.style.display = 'block';
+  document.getElementById('log-panel').style.display = 'block';
+
+  document.getElementById('video-meta').innerHTML = `
+    <div style="display:flex;gap:16px;flex-wrap:wrap;font-family:var(--mono);font-size:12px;color:var(--muted)">
+      <span>📽 <strong style="color:var(--text)">${data.title}</strong></span>
+      <span>⏱ ${data.total_duration_seconds}s</span>
+      <span>🎞 ${data.production_scenes.length} scenes</span>
+      <span>✅ ${data.coverage_pct} coverage</span>
+      <span>🎨 ${data.technical?.color_grade || 'auto'}</span>
+    </div>`;
+
+  const list = document.getElementById('scene-list');
+  list.innerHTML = data.production_scenes.map(s => `
+    <div class="scene-card" id="scene-${s.scene_number}">
+      <div class="scene-num">${s.scene_number}</div>
+      <div class="scene-info">
+        <h3>${s.text_overlay || s.narration?.substring(0,40) || 'Scene ' + s.scene_number}</h3>
+        <p>${s.emotion} · ${s.duration_seconds}s · ${s.transition} · ${s.author || 'Pexels'}</p>
+      </div>
+      <div class="scene-tag ${s.has_video ? 'ok' : 'fail'}" id="tag-${s.scene_number}">
+        ${s.has_video ? '✓ URL' : '✗ No URL'}
+      </div>
+    </div>`).join('');
+
+  const thumbs = document.getElementById('thumb-strip');
+  thumbs.innerHTML = data.production_scenes
+    .filter(s => s.thumbnail)
+    .map(s => `<div class="thumb-item">
+      <img src="${s.thumbnail}" alt="Scene ${s.scene_number}" onerror="this.style.display='none'">
+      <div class="thumb-overlay">${s.scene_number}</div>
+    </div>`).join('');
+
+  const btn = document.getElementById('assemble-btn');
+  const note = document.getElementById('assemble-note');
+  if (ffmpegReady) { btn.disabled = false; note.textContent = `${data.production_scenes.length} scenes ready`; }
+  else note.textContent = 'Waiting for FFmpeg.wasm...';
+}
+
+function setProgress(pct, label) {
+  document.getElementById('progress-fill').style.width = pct + '%';
+  document.getElementById('progress-pct').textContent = Math.round(pct) + '%';
+  document.getElementById('progress-label').textContent = label;
+}
+
+function addLog(msg, type = '') {
+  const t = document.getElementById('terminal');
+  if (!t) return;
+  const line = document.createElement('div');
+  line.className = 'log-line' + (type === 'error' ? ' log-error' : type === 'warn' ? ' log-warn' : type === 'info' ? ' log-info' : '');
+  const time = new Date().toTimeString().split(' ')[0];
+  line.textContent = `[${time}] ${msg}`;
+  t.appendChild(line);
+  t.scrollTop = t.scrollHeight;
+}
+
+function setSceneStatus(num, status) {
+  const card = document.getElementById(`scene-${num}`);
+  const tag = document.getElementById(`tag-${num}`);
+  if (!card || !tag) return;
+  card.className = 'scene-card ' + (status === 'done' ? 'done' : status === 'error' ? 'error' : 'active');
+  tag.className = 'scene-tag ' + (status === 'done' ? 'ok' : status === 'error' ? 'fail' : 'working');
+  tag.textContent = status === 'done' ? '✓ Done' : status === 'error' ? '✗ Error' : '⟳ Working';
+}
+
+async function startAssembly() {
+  if (!parsedData || !ffmpegReady) return;
+  document.getElementById('assemble-btn').disabled = true;
+  document.getElementById('result-card').classList.remove('visible');
+
+  const data = parsedData;
+  const scenes = data.production_scenes.filter(s => s.video_url && s.has_video);
+  const totalSteps = scenes.length + 5; // Loading font & music, then scenes, then concat, then mix
+  let step = 0;
+
+  const isTtsEnabled = document.getElementById('opt-tts').checked;
+  geminiApiKey = document.getElementById('gemini-api-key').value.trim();
+  if (isTtsEnabled && !geminiApiKey) {
+    addLog('AI Voiceover enabled but no Gemini API key provided — skipping TTS.', 'warn');
+  }
+  const isCaptionsEnabled = document.getElementById('opt-captions').checked;
+  const isBgMusicEnabled = document.getElementById('opt-bg-music').checked;
+  const selectedVoice = document.getElementById('opt-voice').value;
+
+  // Load font if needed for captions
+  if (isCaptionsEnabled) {
+    addLog('Ensuring font.ttf is ready...', 'info');
+    try {
+      const fontRes = await fetch('/font.ttf');
+      if (!fontRes.ok) throw new Error(`HTTP ${fontRes.status}`);
+      const fontData = await fontRes.arrayBuffer();
+      ffmpeg.FS('writeFile', 'font.ttf', new Uint8Array(fontData));
+      addLog('font.ttf loaded.', 'ok');
+    } catch (e) {
+      addLog('Failed to load font.ttf, disabling captions: ' + e.message, 'warn');
+      document.getElementById('opt-captions').checked = false;
+    }
+  }
+
+  // Load Background Music if enabled
+  if (isBgMusicEnabled) {
+    addLog('Loading background music...', 'info');
+    try {
+      const musicRes = await fetch('/bg_music.mp3');
+      if (!musicRes.ok) throw new Error(`HTTP ${musicRes.status}`);
+      const musicData = await musicRes.arrayBuffer();
+      ffmpeg.FS('writeFile', 'bg_music.mp3', new Uint8Array(musicData));
+      addLog('Background music loaded.', 'ok');
+    } catch (e) {
+      addLog('Failed to load background music, proceeding without: ' + e.message, 'warn');
+      // Set to unchecked so we don't try to mix it at the end
+      document.getElementById('opt-bg-music').checked = false;
+    }
+  }
+
+  // Auto color filter
+  let colorFilter = document.getElementById('opt-grade').value;
+  if (colorFilter === 'auto') colorFilter = data.technical?.ffmpeg_color_filter || 'eq=brightness=0.06:saturation=1.4';
+  else if (colorFilter === 'warm') colorFilter = 'eq=brightness=0.06:saturation=1.4:contrast=1.1,colorbalance=rs=0.1:gs=0:bs=-0.1';
+  else if (colorFilter === 'cool') colorFilter = 'eq=brightness=0.02:saturation=1.1:contrast=1.05,colorbalance=rs=-0.1:gs=0:bs=0.15';
+  else colorFilter = null;
+
+  const textStyle = document.getElementById('opt-text').value;
+  const fps = document.getElementById('opt-fps').value;
+  const res = document.getElementById('opt-res').value;
+  const [resW, resH] = res.split('x');
+
+  addLog(`Starting assembly: ${scenes.length} scenes, ${res} @ ${fps}fps`);
+  addLog(`Color grade: ${colorFilter ? 'applied' : 'none'}`);
+
+  ffmpeg.setLogger(({ type, message }) => {
+    addLog(`[FFmpeg] ${message}`, 'info');
+    if (type === 'fferr' && message.includes('frame=')) {
+      const m = message.match(/frame=\s*(\d+)/);
+      if (m) setProgress(85 + (parseInt(m[1]) / 1000), `Assembling...`); // Rough progress update
+    }
+  });
+
+  const clips = [];
+
+  for (let i = 0; i < scenes.length; i++) {
+    const scene = scenes[i];
+    step++;
+    setProgress((step / totalSteps) * 80, `Downloading scene ${i+1}/${scenes.length}...`);
+    setSceneStatus(scene.scene_number, 'working');
+    addLog(`Scene ${scene.scene_number}: fetching ${scene.video_url.split('/').slice(-1)[0]}...`);
+
+    try {
+      // Fetch video directly (Pexels supports CORS), fallback to corsproxy
+      let res2;
+      try {
+        res2 = await fetch(scene.video_url);
+        if (!res2.ok) throw new Error('direct fetch failed');
+      } catch (e) {
+        addLog(`Direct fetch failed, trying CORS proxy...`, 'warn');
+        res2 = await fetch(`https://corsproxy.io/?${encodeURIComponent(scene.video_url)}`);
+        if (!res2.ok) throw new Error('HTTP ' + res2.status);
+      }
+      const buf = await res2.arrayBuffer();
+      const inName = `in_${i}.mp4`;
+      const outName = `clip_${i}.mp4`;
+      ffmpeg.FS('writeFile', inName, new Uint8Array(buf));
+
+      // Build filter
+      let vf = `scale=${resW}:${resH}:force_original_aspect_ratio=decrease,pad=${resW}:${resH}:(ow-iw)/2:(oh-ih)/2`;
+      if (colorFilter) vf += ',' + colorFilter;
+      
+      if (isCaptionsEnabled && scene.text_overlay) {
+        const txt = scene.text_overlay.replace(/'/g, '').replace(/:/g, '\\:');
+        vf += `,drawtext=text='${txt}':fontfile=font.ttf:fontsize=48:fontcolor=white:borderw=2:bordercolor=black:x=(w-text_w)/2:y=h-140`;
+      }
+
+      const runArgs = [
+        '-i', inName
+      ];
+
+      // Add Narration via Gemini 2.5 Flash TTS
+      let narrationFileName = null;
+      if (isTtsEnabled && scene.narration && geminiApiKey) {
+        try {
+          addLog(`Gemini TTS: generating voice for scene ${scene.scene_number}...`);
+          const ttsData = await geminiTTS(scene.narration, selectedVoice, geminiApiKey);
+          narrationFileName = `tts_${scene.scene_number}.wav`;
+          ffmpeg.FS('writeFile', narrationFileName, new Uint8Array(ttsData));
+          runArgs.push('-i', narrationFileName);
+          addLog(`Narration ready for scene ${scene.scene_number} ✓`, 'ok');
+        } catch (e) {
+          addLog(`Narration failed for scene ${scene.scene_number}: ${e.message}. Using silence.`, 'warn');
+          narrationFileName = null;
+        }
+      }
+
+      // FFmpeg processing for this scene
+      const duration = scene.duration_seconds || 5;
+      
+      // Filter complex to ensure audio exist
+      let filterComplex = '';
+      if (narrationFileName) {
+        // Just use the narration audio
+        filterComplex = `[1:a]acollect,anull[a]`; // (simplified, just take 2nd input audio)
+        // Wait, better:
+        runArgs.push('-filter_complex', `[1:a]atrim=0:${duration},asetpts=PTS-STARTPTS[a]`, '-map', '0:v:0', '-map', '[a]');
+      } else {
+        // Generate silence
+        runArgs.push('-f', 'lavfi', '-i', `anullsrc=channel_layout=mono:sample_rate=44100`, '-map', '0:v:0', '-map', '1:a:0');
+      }
+
+      runArgs.push(
+        '-t', String(duration),
+        '-vf', vf,
+        '-r', fps,
+        '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '28',
+        '-c:a', 'aac', '-b:a', '128k', '-ar', '44100',
+        '-shortest', '-movflags', '+faststart',
+        outName
+      );
+
+      await ffmpeg.run(...runArgs);
+
+      const stats = ffmpeg.FS('stat', outName);
+      addLog(`Scene ${scene.scene_number} processed ✓ (${(stats.size / 1024 / 1024).toFixed(2)} MB)`, 'ok');
+      ffmpeg.FS('unlink', inName);
+      if (narrationFileName) ffmpeg.FS('unlink', narrationFileName);
+      clips.push(outName);
+      setSceneStatus(scene.scene_number, 'done');
+      addLog(`Scene ${scene.scene_number} processed ✓`);
+    } catch(e) {
+      setSceneStatus(scene.scene_number, 'error');
+      addLog(`Scene ${scene.scene_number} failed: ${e.message}`, 'error');
+    }
+  }
+
+  if (clips.length === 0) {
+    addLog('No clips processed. Check CORS proxy or video URLs.', 'error');
+    document.getElementById('assemble-btn').disabled = false;
+    return;
+  }
+
+  // Concat
+  const listContent = clips.map(c => `file '${c}'`).join('\n');
+  addLog('Concatenation list:\n' + listContent, 'info');
+  ffmpeg.FS('writeFile', 'list.txt', new TextEncoder().encode(listContent));
+
+  // Verify files exist in FS
+  const fsFiles = ffmpeg.FS('readdir', '/');
+  addLog('Files in FFmpeg FS: ' + fsFiles.join(', '), 'info');
+
+  try {
+    await ffmpeg.run(
+      '-f', 'concat', '-safe', '0', '-i', 'list.txt',
+      '-c', 'copy', 'merged.mp4'
+    );
+
+    let finalFile = 'merged.mp4';
+
+    // Mix Background Music
+    if (isBgMusicEnabled) {
+      setProgress(90, 'Mixing background music...');
+      addLog('Mixing background music...');
+      await ffmpeg.run(
+        '-i', 'merged.mp4',
+        '-filter_complex', 'amovie=bg_music.mp3:loop=0,volume=0.15[bg];[0:a][bg]amix=inputs=2:duration=first[a]',
+        '-map', '0:v:0', '-map', '[a]',
+        '-c:v', 'copy', '-c:a', 'aac', '-b:a', '128k',
+        'final.mp4'
+      );
+      finalFile = 'final.mp4';
+    } else {
+      // If no music, just rename merged to final
+      ffmpeg.FS('rename', 'merged.mp4', 'final.mp4');
+    }
+
+    setProgress(95, 'Finalizing...');
+    addLog('Finalizing output...');
+
+    const output = ffmpeg.FS('readFile', 'final.mp4');
+    const blob = new Blob([output.buffer], { type: 'video/mp4' });
+    const url = URL.createObjectURL(blob);
+    const sizeMB = (blob.size / 1024 / 1024).toFixed(1);
+
+    setProgress(100, 'Complete!');
+    addLog(`Done! Output: ${sizeMB}MB MP4 ready for download.`, 'ok');
+
+    const dl = document.getElementById('download-link');
+    dl.href = url;
+    dl.download = `${(data.title || 'motivational_video').replace(/[^a-z0-9]/gi,'_')}.mp4`;
+    document.getElementById('result-desc').textContent =
+      `${clips.length} scenes assembled · ${data.total_duration_seconds}s · ${sizeMB}MB`;
+    document.getElementById('result-card').classList.add('visible');
+
+    // Cleanup
+    clips.forEach(c => { try { ffmpeg.FS('unlink', c); } catch(e){} });
+    try { ffmpeg.FS('unlink', 'final.mp4'); ffmpeg.FS('unlink', 'list.txt'); } catch(e){}
+
+  } catch(e) {
+    addLog('Concat failed: ' + e.message, 'error');
+    addLog('Trying individual clip download instead...', 'warn');
+    // Fallback: let user download individual clips
+    for (let i = 0; i < clips.length; i++) {
+      try {
+        const clip = ffmpeg.FS('readFile', clips[i]);
+        const blob = new Blob([clip.buffer], { type: 'video/mp4' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `scene_${i+1}.mp4`;
+        a.click();
+      } catch(e2) {}
+    }
+  }
+
+  document.getElementById('assemble-btn').disabled = false;
+}
+
+function reset() {
+  document.getElementById('result-card').classList.remove('visible');
+  document.getElementById('scene-panel').style.display = 'none';
+  document.getElementById('json-input').value = '';
+  parsedData = null;
+  setProgress(0, 'Ready');
+  document.getElementById('terminal').innerHTML = '';
+}
+
+// Auto-init log panel
+window.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('log-panel').style.display = 'block';
+  addLog('Video Assembler ready. Paste your n8n JSON and click Parse.', 'info');
+});
+</script>
+</body>
+</html>
