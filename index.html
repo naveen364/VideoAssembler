@@ -655,9 +655,14 @@
                 <option value="none">None</option>
               </select>
             </div>
-            <div class="option-group">
-              <label>AI Voiceover</label>
+            <div class="option-group" style="grid-column:1/-1;">
+              <label>AI Voiceover Engine</label>
               <div style="display:flex; gap:8px; align-items:center;">
+                <select id="opt-tts-engine" style="flex:1" onchange="toggleTtsInfo()">
+                  <option value="gemini">Gemini TTS (API Key needed)</option>
+                  <option value="piper">Piper TTS (WASM - Free, Local)</option>
+                  <option value="google">Basic Free TTS (Google Translate)</option>
+                </select>
                 <select id="opt-voice" style="flex:1">
                   <option value="Kore">Kore (Female, firm)</option>
                   <option value="Aoede">Aoede (Female, breezy)</option>
@@ -668,7 +673,7 @@
                   <option value="Fenrir">Fenrir (Male, excitable)</option>
                   <option value="Orus">Orus (Male, confident)</option>
                 </select>
-                <input type="checkbox" id="opt-tts" style="width:20px; height:20px;">
+                <input type="checkbox" id="opt-tts" style="width:20px; height:20px;" checked>
               </div>
             </div>
             <div class="option-group">
@@ -683,7 +688,7 @@
               </div>
             </div>
           </div>
-          <div class="info-box" style="margin-bottom:12px;">
+          <div class="info-box" id="gemini-api-box" style="margin-bottom:12px;">
             <strong>Gemini TTS (gemini-2.5-flash-preview-tts)</strong> — Enable AI Voiceover above and paste your API
             key:
             <div style="display:flex;gap:8px;margin-top:8px;">
@@ -930,6 +935,43 @@ CMD ["python", "app.py"]</pre>
       new Uint8Array(buf).set(pcm, 44);
       return buf;
     }
+
+    // Google Translate TTS
+    async function googleTTS(text) {
+      const proxy = 'https://api.allorigins.win/raw?url=';
+      const target = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(text)}&tl=en&client=tw-ob`;
+      const res = await fetch(proxy + encodeURIComponent(target));
+      if (!res.ok) throw new Error(`Google TTS failed HTTP ${res.status}`);
+      return await res.arrayBuffer();
+    }
+
+    // Piper TTS (WASM)
+    let piperPredict = null;
+    async function piperTTS(text, selectedVoice) {
+      if (!piperPredict) {
+        addLog('Loading Piper TTS WebAssembly (one-time download, ~20MB)...', 'info');
+        const tts = await import('https://cdn.jsdelivr.net/npm/@diffusionstudio/vits-web/+esm');
+        piperPredict = tts.predict;
+      }
+      
+      let voiceId = 'en_US-hfc_female-medium'; 
+      if (['Puck', 'Charon', 'Fenrir', 'Orus'].includes(selectedVoice)) {
+        voiceId = 'en_US-joe-medium'; // Attempt a male voice for male Gemini equivalent
+      }
+
+      try {
+        const wavBlob = await piperPredict({ text: text, voiceId: voiceId });
+        return await wavBlob.arrayBuffer();
+      } catch (e) {
+        if (voiceId !== 'en_US-hfc_female-medium') {
+           addLog(`Piper voice ${voiceId} failed, falling back to default female voice...`, 'warn');
+           const wavBlob = await piperPredict({ text: text, voiceId: 'en_US-hfc_female-medium' });
+           return await wavBlob.arrayBuffer();
+        }
+        throw e;
+      }
+    }
+
 
     // Load FFmpeg in background
     (async () => {
@@ -1328,19 +1370,35 @@ CMD ["python", "app.py"]</pre>
             '-i', inName
           ];
 
-          // Add Narration via Gemini 2.5 Flash TTS
+          // Add Narration
           let narrationFileName = null;
-          if (isTtsEnabled && scene.narration && geminiApiKey) {
-            try {
-              addLog(`Gemini TTS: generating voice for scene ${scene.scene_number}...`);
-              const ttsData = await geminiTTS(scene.narration, selectedVoice, geminiApiKey);
-              narrationFileName = `tts_${scene.scene_number}.wav`;
-              ffmpeg.FS('writeFile', narrationFileName, new Uint8Array(ttsData));
-              runArgs.push('-i', narrationFileName);
-              addLog(`Narration ready for scene ${scene.scene_number} ✓`, 'ok');
-            } catch (e) {
-              addLog(`Narration failed for scene ${scene.scene_number}: ${e.message}. Using silence.`, 'warn');
-              narrationFileName = null;
+          const ttsEngine = document.getElementById('opt-tts-engine').value;
+          
+          if (isTtsEnabled && scene.narration) {
+            if (ttsEngine === 'gemini' && !geminiApiKey) {
+               addLog(`Voiceover enabled but no Gemini API key provided — skipping TTS for scene ${scene.scene_number}.`, 'warn');
+            } else {
+              try {
+                addLog(`${ttsEngine.toUpperCase()} TTS: generating voice for scene ${scene.scene_number}...`);
+                let ttsData;
+                if (ttsEngine === 'gemini') {
+                  ttsData = await geminiTTS(scene.narration, selectedVoice, geminiApiKey);
+                  narrationFileName = `tts_${scene.scene_number}.wav`;
+                } else if (ttsEngine === 'piper') {
+                  ttsData = await piperTTS(scene.narration, selectedVoice);
+                  narrationFileName = `tts_${scene.scene_number}.wav`;
+                } else if (ttsEngine === 'google') {
+                  ttsData = await googleTTS(scene.narration);
+                  narrationFileName = `tts_${scene.scene_number}.mp3`;
+                }
+                
+                ffmpeg.FS('writeFile', narrationFileName, new Uint8Array(ttsData));
+                runArgs.push('-i', narrationFileName);
+                addLog(`Narration ready for scene ${scene.scene_number} ✓`, 'ok');
+              } catch (e) {
+                addLog(`Narration failed for scene ${scene.scene_number}: ${e.message}. Using silence.`, 'warn');
+                narrationFileName = null;
+              }
             }
           }
 
@@ -1474,10 +1532,31 @@ CMD ["python", "app.py"]</pre>
       document.getElementById('terminal').innerHTML = '';
     }
 
+    function toggleTtsInfo() {
+      const engine = document.getElementById('opt-tts-engine').value;
+      const box = document.getElementById('gemini-api-box');
+      if (engine === 'gemini') {
+        box.style.display = 'block';
+        box.innerHTML = `<strong>Gemini TTS (gemini-2.5-flash-preview-tts)</strong> — Enable AI Voiceover above and paste your API key:
+            <div style="display:flex;gap:8px;margin-top:8px;">
+              <input type="password" id="gemini-api-key" placeholder="AIza... (Google AI Studio API key)"
+                style="flex:1;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:12px;padding:8px 10px;outline:none;" />
+            </div>
+            <div style="margin-top:6px;font-size:11px;">Get a free key at <a href="https://aistudio.google.com/apikey" target="_blank" style="color:var(--accent)">aistudio.google.com/apikey</a></div>`;
+      } else if (engine === 'piper') {
+        box.style.display = 'block';
+        box.innerHTML = `<strong>Piper TTS (Local WebAssembly)</strong> — Runs 100% locally. A ~15MB voice model will be downloaded automatically on the first run.`;
+      } else {
+        box.style.display = 'block';
+        box.innerHTML = `<strong>Basic Free TTS (Google Translate)</strong> — Free cloud TTS. Note: Audio quality is basic and has a strict length limit (~200 chars).`;
+      }
+    }
+
     // Auto-init log panel
     window.addEventListener('DOMContentLoaded', () => {
       document.getElementById('log-panel').style.display = 'block';
       addLog('Video Assembler ready. Paste your n8n JSON and click Parse.', 'info');
+      toggleTtsInfo(); // Initialize TTS info box
     });
   </script>
 </body>
