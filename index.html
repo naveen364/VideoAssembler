@@ -1264,9 +1264,12 @@ CMD ["python", "app.py"]</pre>
       let step = 0;
 
       const isTtsEnabled = document.getElementById('opt-tts').checked;
-      geminiApiKey = document.getElementById('gemini-api-key').value.trim();
-      if (isTtsEnabled && !geminiApiKey) {
-        addLog('AI Voiceover enabled but no Gemini API key provided — skipping TTS.', 'warn');
+      const ttsEngine = document.getElementById('opt-tts-engine').value;
+      if (ttsEngine === 'gemini') {
+        geminiApiKey = document.getElementById('gemini-api-key')?.value?.trim() || '';
+        if (isTtsEnabled && !geminiApiKey) {
+          addLog('AI Voiceover enabled but no Gemini API key provided — skipping TTS.', 'warn');
+        }
       }
       const isCaptionsEnabled = document.getElementById('opt-captions').checked;
       const isBgMusicEnabled = document.getElementById('opt-bg-music').checked;
