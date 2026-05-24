@@ -225,6 +225,74 @@
   .mt { margin-top: 16px; }
   .flex-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 
+  /* TTS Provider Toggle */
+  .tts-provider-wrap {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 16px; margin-bottom: 16px;
+  }
+  .tts-provider-label {
+    font-size: 11px; font-family: var(--mono); color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .tts-toggle-track {
+    display: flex; background: var(--bg); border: 1px solid var(--border);
+    border-radius: 10px; overflow: hidden; position: relative;
+  }
+  .tts-toggle-option {
+    flex: 1; padding: 10px 16px; text-align: center;
+    font-family: var(--mono); font-size: 12px; font-weight: 600;
+    color: var(--muted); cursor: pointer; transition: all 0.3s ease;
+    position: relative; z-index: 1; user-select: none;
+  }
+  .tts-toggle-option.active { color: #fff; }
+  .tts-toggle-slider {
+    position: absolute; top: 2px; bottom: 2px; width: calc(50% - 2px);
+    border-radius: 8px; transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 0;
+  }
+  .tts-toggle-slider.local {
+    left: 2px;
+    background: linear-gradient(135deg, #40e0a0, #2ab880);
+  }
+  .tts-toggle-slider.cloud {
+    left: calc(50%);
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+  }
+  .tts-provider-panel {
+    margin-top: 12px; animation: fadeSlideIn 0.3s ease;
+  }
+  @keyframes fadeSlideIn {
+    from { opacity: 0; transform: translateY(-6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .connection-dot {
+    width: 8px; height: 8px; border-radius: 50%; display: inline-block;
+    margin-right: 6px; flex-shrink: 0;
+  }
+  .connection-dot.connected {
+    background: var(--success);
+    box-shadow: 0 0 6px var(--success);
+    animation: dotPulse 2s ease infinite;
+  }
+  .connection-dot.disconnected {
+    background: var(--error);
+    box-shadow: 0 0 6px var(--error);
+  }
+  .connection-dot.checking {
+    background: var(--warning);
+    animation: dotPulse 0.8s ease infinite;
+  }
+  @keyframes dotPulse {
+    0%,100% { opacity: 1; } 50% { opacity: 0.4; }
+  }
+  .tts-status-bar {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 11px; font-family: var(--mono); color: var(--muted);
+    padding: 8px 12px; background: var(--bg); border-radius: 8px;
+    border: 1px solid var(--border); margin-bottom: 10px;
+  }
+
 </style>
 </head>
 <body>
@@ -346,22 +414,6 @@
             </select>
           </div>
           <div class="option-group">
-            <label>AI Voiceover</label>
-            <div style="display:flex; gap:8px; align-items:center;">
-              <select id="opt-voice" style="flex:1">
-                <option value="Kore">Kore (Female, firm)</option>
-                <option value="Aoede">Aoede (Female, breezy)</option>
-                <option value="Leda">Leda (Female, youthful)</option>
-                <option value="Zephyr">Zephyr (Female, bright)</option>
-                <option value="Puck">Puck (Male, upbeat)</option>
-                <option value="Charon">Charon (Male, informative)</option>
-                <option value="Fenrir">Fenrir (Male, excitable)</option>
-                <option value="Orus">Orus (Male, confident)</option>
-              </select>
-              <input type="checkbox" id="opt-tts" style="width:20px; height:20px;">
-            </div>
-          </div>
-          <div class="option-group">
             <label>Music & Captions</label>
             <div style="display:flex; gap:12px; align-items:center; font-size:12px;">
               <label style="display:flex; align-items:center; gap:4px; font-weight:normal;">
@@ -373,13 +425,78 @@
             </div>
           </div>
         </div>
-        <div class="info-box" style="margin-bottom:12px;">
-          <strong>Gemini TTS (gemini-2.5-flash-preview-tts)</strong> — Enable AI Voiceover above and paste your API key:
-          <div style="display:flex;gap:8px;margin-top:8px;">
-            <input type="password" id="gemini-api-key" placeholder="AIza... (Google AI Studio API key)" style="flex:1;background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:12px;padding:8px 10px;outline:none;" />
+
+        <!-- TTS Provider Toggle -->
+        <div class="tts-provider-wrap">
+          <div class="tts-provider-label">
+            🎙️ AI Voiceover Engine
+            <input type="checkbox" id="opt-tts" style="width:18px; height:18px; margin-left:auto; cursor:pointer;" title="Enable/disable voiceover">
+            <span style="font-size:10px; font-weight:400; text-transform:none; letter-spacing:0;">Enable</span>
           </div>
-          <div style="margin-top:6px;font-size:11px;">Get a free key at <a href="https://aistudio.google.com/apikey" target="_blank" style="color:var(--accent)">aistudio.google.com/apikey</a></div>
+
+          <div class="tts-toggle-track" id="tts-toggle-track">
+            <div class="tts-toggle-slider local" id="tts-toggle-slider"></div>
+            <div class="tts-toggle-option active" id="tts-opt-local" onclick="setTtsProvider('local')">🏠 Local (Piper)</div>
+            <div class="tts-toggle-option" id="tts-opt-cloud" onclick="setTtsProvider('cloud')">☁️ Cloud (Gemini)</div>
+          </div>
+
+          <!-- Local Provider Panel -->
+          <div class="tts-provider-panel" id="tts-panel-local">
+            <div class="tts-status-bar" id="tts-local-status">
+              <span class="connection-dot checking" id="tts-local-dot"></span>
+              <span id="tts-local-status-text">Checking local server...</span>
+            </div>
+            <div class="options-grid">
+              <div class="option-group">
+                <label>Server URL</label>
+                <input type="text" id="local-tts-url" value="http://localhost:5050"
+                  style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:12px;padding:8px 10px;outline:none;"
+                  onchange="checkLocalTts()" />
+              </div>
+              <div class="option-group">
+                <label>Voice</label>
+                <select id="opt-local-voice" style="width:100%;">
+                  <option value="en_US-amy-medium">Amy (Female, American)</option>
+                  <option value="en_US-lessac-medium">Lessac (Male, American)</option>
+                  <option value="en_US-ryan-medium">Ryan (Male, American)</option>
+                  <option value="en_GB-alba-medium">Alba (Female, British)</option>
+                  <option value="en_US-lessac-high">Lessac (Male, High Quality)</option>
+                </select>
+              </div>
+            </div>
+            <div style="font-size:11px;color:var(--muted);margin-top:4px;">
+              100% free & offline · Run <code style="background:var(--bg);padding:2px 6px;border-radius:4px;font-family:var(--mono);">docker compose up</code> in the project folder to start
+            </div>
+          </div>
+
+          <!-- Cloud Provider Panel -->
+          <div class="tts-provider-panel" id="tts-panel-cloud" style="display:none;">
+            <div class="options-grid">
+              <div class="option-group">
+                <label>Gemini Voice</label>
+                <select id="opt-voice" style="width:100%;">
+                  <option value="Kore">Kore (Female, firm)</option>
+                  <option value="Aoede">Aoede (Female, breezy)</option>
+                  <option value="Leda">Leda (Female, youthful)</option>
+                  <option value="Zephyr">Zephyr (Female, bright)</option>
+                  <option value="Puck">Puck (Male, upbeat)</option>
+                  <option value="Charon">Charon (Male, informative)</option>
+                  <option value="Fenrir">Fenrir (Male, excitable)</option>
+                  <option value="Orus">Orus (Male, confident)</option>
+                </select>
+              </div>
+              <div class="option-group">
+                <label>API Key</label>
+                <input type="password" id="gemini-api-key" placeholder="AIza... (Google AI Studio key)"
+                  style="width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--mono);font-size:12px;padding:8px 10px;outline:none;" />
+              </div>
+            </div>
+            <div style="font-size:11px;color:var(--muted);margin-top:4px;">
+              Gemini 2.5 Flash TTS · Get a free key at <a href="https://aistudio.google.com/apikey" target="_blank" style="color:var(--accent)">aistudio.google.com/apikey</a>
+            </div>
+          </div>
         </div>
+
         <div class="info-box" style="margin:0">
           <strong>Note:</strong> FFmpeg.wasm loads ~32MB on first run. Assembly time depends on total video duration and your device speed.
         </div>
@@ -596,6 +713,87 @@ function pcmToWav(pcm, sampleRate, numChannels, bitDepth) {
   view.setUint32(40, dataLen, true);
   new Uint8Array(buf).set(pcm, 44);
   return buf;
+}
+
+// ========== TTS PROVIDER TOGGLE ==========
+let ttsProvider = 'local'; // 'local' or 'cloud'
+let localTtsConnected = false;
+
+function setTtsProvider(provider) {
+  ttsProvider = provider;
+  const slider = document.getElementById('tts-toggle-slider');
+  const optLocal = document.getElementById('tts-opt-local');
+  const optCloud = document.getElementById('tts-opt-cloud');
+  const panelLocal = document.getElementById('tts-panel-local');
+  const panelCloud = document.getElementById('tts-panel-cloud');
+
+  if (provider === 'local') {
+    slider.className = 'tts-toggle-slider local';
+    optLocal.classList.add('active');
+    optCloud.classList.remove('active');
+    panelLocal.style.display = 'block';
+    panelCloud.style.display = 'none';
+  } else {
+    slider.className = 'tts-toggle-slider cloud';
+    optCloud.classList.add('active');
+    optLocal.classList.remove('active');
+    panelCloud.style.display = 'block';
+    panelLocal.style.display = 'none';
+  }
+}
+
+async function checkLocalTts() {
+  const url = document.getElementById('local-tts-url').value.trim();
+  const dot = document.getElementById('tts-local-dot');
+  const statusText = document.getElementById('tts-local-status-text');
+
+  dot.className = 'connection-dot checking';
+  statusText.textContent = 'Checking local server...';
+
+  try {
+    const res = await fetch(url + '/health', { signal: AbortSignal.timeout(3000) });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    dot.className = 'connection-dot connected';
+    statusText.textContent = `Connected — ${data.engine || 'Piper TTS'} ready`;
+    localTtsConnected = true;
+
+    // Also fetch voices and populate the dropdown
+    try {
+      const vRes = await fetch(url + '/voices', { signal: AbortSignal.timeout(3000) });
+      if (vRes.ok) {
+        const vData = await vRes.json();
+        const select = document.getElementById('opt-local-voice');
+        if (vData.voices && vData.voices.length > 0) {
+          select.innerHTML = vData.voices.map(v =>
+            `<option value="${v.id}">${v.label}</option>`
+          ).join('');
+        }
+      }
+    } catch(e) { /* keep defaults */ }
+
+    return true;
+  } catch(e) {
+    dot.className = 'connection-dot disconnected';
+    statusText.textContent = 'Not connected — start Docker server first';
+    localTtsConnected = false;
+    return false;
+  }
+}
+
+// Local Piper TTS — returns ArrayBuffer (WAV)
+async function localTTS(text, voiceName, serverUrl) {
+  const url = `${serverUrl}/synthesize`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text, voice: voiceName, speed: 1.0 })
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err?.error || `HTTP ${res.status}`);
+  }
+  return await res.arrayBuffer();
 }
 
 // Load FFmpeg in background
@@ -879,13 +1077,25 @@ async function startAssembly() {
   let step = 0;
 
   const isTtsEnabled = document.getElementById('opt-tts').checked;
+  const currentTtsProvider = ttsProvider; // 'local' or 'cloud'
   geminiApiKey = document.getElementById('gemini-api-key').value.trim();
-  if (isTtsEnabled && !geminiApiKey) {
-    addLog('AI Voiceover enabled but no Gemini API key provided — skipping TTS.', 'warn');
+  const localServerUrl = document.getElementById('local-tts-url').value.trim();
+  const selectedLocalVoice = document.getElementById('opt-local-voice').value;
+  const selectedCloudVoice = document.getElementById('opt-voice').value;
+
+  if (isTtsEnabled && currentTtsProvider === 'cloud' && !geminiApiKey) {
+    addLog('Cloud TTS enabled but no Gemini API key provided — skipping TTS.', 'warn');
+  }
+  if (isTtsEnabled && currentTtsProvider === 'local' && !localTtsConnected) {
+    addLog('Local TTS enabled but server not connected — checking...', 'warn');
+    const ok = await checkLocalTts();
+    if (!ok) addLog('Local TTS server unreachable — skipping TTS.', 'warn');
+  }
+  if (isTtsEnabled) {
+    addLog(`TTS Provider: ${currentTtsProvider === 'local' ? '🏠 Local (Piper)' : '☁️ Cloud (Gemini)'}`);
   }
   const isCaptionsEnabled = document.getElementById('opt-captions').checked;
   const isBgMusicEnabled = document.getElementById('opt-bg-music').checked;
-  const selectedVoice = document.getElementById('opt-voice').value;
 
   // Load font if needed for captions
   if (isCaptionsEnabled) {
@@ -979,16 +1189,24 @@ async function startAssembly() {
         '-i', inName
       ];
 
-      // Add Narration via Gemini 2.5 Flash TTS
+      // Add Narration via selected TTS provider
       let narrationFileName = null;
-      if (isTtsEnabled && scene.narration && geminiApiKey) {
+      if (isTtsEnabled && scene.narration) {
         try {
-          addLog(`Gemini TTS: generating voice for scene ${scene.scene_number}...`);
-          const ttsData = await geminiTTS(scene.narration, selectedVoice, geminiApiKey);
-          narrationFileName = `tts_${scene.scene_number}.wav`;
-          ffmpeg.FS('writeFile', narrationFileName, new Uint8Array(ttsData));
-          runArgs.push('-i', narrationFileName);
-          addLog(`Narration ready for scene ${scene.scene_number} ✓`, 'ok');
+          let ttsData;
+          if (currentTtsProvider === 'local' && localTtsConnected) {
+            addLog(`🏠 Local TTS: generating voice for scene ${scene.scene_number}...`);
+            ttsData = await localTTS(scene.narration, selectedLocalVoice, localServerUrl);
+          } else if (currentTtsProvider === 'cloud' && geminiApiKey) {
+            addLog(`☁️ Gemini TTS: generating voice for scene ${scene.scene_number}...`);
+            ttsData = await geminiTTS(scene.narration, selectedCloudVoice, geminiApiKey);
+          }
+          if (ttsData) {
+            narrationFileName = `tts_${scene.scene_number}.wav`;
+            ffmpeg.FS('writeFile', narrationFileName, new Uint8Array(ttsData));
+            runArgs.push('-i', narrationFileName);
+            addLog(`Narration ready for scene ${scene.scene_number} ✓`, 'ok');
+          }
         } catch (e) {
           addLog(`Narration failed for scene ${scene.scene_number}: ${e.message}. Using silence.`, 'warn');
           narrationFileName = null;
@@ -1129,6 +1347,17 @@ function reset() {
 window.addEventListener('DOMContentLoaded', () => {
   document.getElementById('log-panel').style.display = 'block';
   addLog('Video Assembler ready. Paste your n8n JSON and click Parse.', 'info');
+
+  // Auto-detect local TTS server
+  checkLocalTts().then(connected => {
+    if (connected) {
+      addLog('🏠 Local TTS server detected at ' + document.getElementById('local-tts-url').value, 'ok');
+      setTtsProvider('local');
+    } else {
+      addLog('Local TTS server not detected — defaulting to Cloud (Gemini).', 'info');
+      setTtsProvider('cloud');
+    }
+  });
 });
 </script>
 </body>

@@ -1,0 +1,16 @@
+services:
+  tts:
+    build: ./tts-server
+    container_name: videoassembler-tts
+    ports:
+      - "5050:5050"
+    volumes:
+      - piper-models:/app/models
+    environment:
+      - DEFAULT_VOICE=en_US-amy-medium
+      - PORT=5050
+    restart: unless-stopped
+
+volumes:
+  piper-models:
+    name: videoassembler-piper-models
