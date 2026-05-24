@@ -648,13 +648,12 @@ CMD ["python", "app.py"]</pre>
 </div>
 
 <!-- FFmpeg.wasm -->
-<script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@ffmpeg/ffmpeg@0.12.7/dist/umd/ffmpeg.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@ffmpeg/util@0.12.1/dist/umd/index.js"></script>
 <script>
-const { createFFmpeg, fetchFile } = FFmpeg;
-const ffmpeg = createFFmpeg({
-  log: false,
-  corePath: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js'
-});
+const { FFmpeg } = window.FFmpeg;
+const { fetchFile } = window.FFmpegUtil;
+const ffmpeg = new FFmpeg();
 
 let parsedData = null;
 let ffmpegReady = false;
@@ -800,7 +799,10 @@ async function localTTS(text, voiceName, serverUrl) {
 (async () => {
   try {
     addLog('Loading FFmpeg.wasm (~32MB, one-time download)...', 'info');
-    await ffmpeg.load();
+    await ffmpeg.load({
+      coreURL: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.4/dist/umd/ffmpeg-core.js',
+      wasmURL: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.4/dist/umd/ffmpeg-core.wasm'
+    });
     ffmpegReady = true;
     addLog('FFmpeg.wasm ready.', 'ok');
     const btn = document.getElementById('assemble-btn');
@@ -1104,7 +1106,7 @@ async function startAssembly() {
       const fontRes = await fetch('/font.ttf');
       if (!fontRes.ok) throw new Error(`HTTP ${fontRes.status}`);
       const fontData = await fontRes.arrayBuffer();
-      ffmpeg.FS('writeFile', 'font.ttf', new Uint8Array(fontData));
+      await ffmpeg.writeFile('font.ttf', new Uint8Array(fontData));
       addLog('font.ttf loaded.', 'ok');
     } catch (e) {
       addLog('Failed to load font.ttf, disabling captions: ' + e.message, 'warn');
@@ -1119,7 +1121,7 @@ async function startAssembly() {
       const musicRes = await fetch('/bg_music.mp3');
       if (!musicRes.ok) throw new Error(`HTTP ${musicRes.status}`);
       const musicData = await musicRes.arrayBuffer();
-      ffmpeg.FS('writeFile', 'bg_music.mp3', new Uint8Array(musicData));
+      await ffmpeg.writeFile('bg_music.mp3', new Uint8Array(musicData));
       addLog('Background music loaded.', 'ok');
     } catch (e) {
       addLog('Failed to load background music, proceeding without: ' + e.message, 'warn');
@@ -1143,9 +1145,9 @@ async function startAssembly() {
   addLog(`Starting assembly: ${scenes.length} scenes, ${res} @ ${fps}fps`);
   addLog(`Color grade: ${colorFilter ? 'applied' : 'none'}`);
 
-  ffmpeg.setLogger(({ type, message }) => {
+  ffmpeg.on('log', ({ message }) => {
     addLog(`[FFmpeg] ${message}`, 'info');
-    if (type === 'fferr' && message.includes('frame=')) {
+    if (message.includes('frame=')) {
       const m = message.match(/frame=\s*(\d+)/);
       if (m) setProgress(85 + (parseInt(m[1]) / 1000), `Assembling...`); // Rough progress update
     }
@@ -1174,7 +1176,7 @@ async function startAssembly() {
       const buf = await res2.arrayBuffer();
       const inName = `in_${i}.mp4`;
       const outName = `clip_${i}.mp4`;
-      ffmpeg.FS('writeFile', inName, new Uint8Array(buf));
+      await ffmpeg.writeFile(inName, new Uint8Array(buf));
 
       // Build filter
       let vf = `scale=${resW}:${resH}:force_original_aspect_ratio=decrease,pad=${resW}:${resH}:(ow-iw)/2:(oh-ih)/2`;
@@ -1203,7 +1205,7 @@ async function startAssembly() {
           }
           if (ttsData) {
             narrationFileName = `tts_${scene.scene_number}.wav`;
-            ffmpeg.FS('writeFile', narrationFileName, new Uint8Array(ttsData));
+            await ffmpeg.writeFile(narrationFileName, new Uint8Array(ttsData));
             runArgs.push('-i', narrationFileName);
             addLog(`Narration ready for scene ${scene.scene_number} ✓`, 'ok');
           }
@@ -1238,12 +1240,12 @@ async function startAssembly() {
         outName
       );
 
-      await ffmpeg.run(...runArgs);
+      await ffmpeg.exec(runArgs);
 
-      const stats = ffmpeg.FS('stat', outName);
-      addLog(`Scene ${scene.scene_number} processed ✓ (${(stats.size / 1024 / 1024).toFixed(2)} MB)`, 'ok');
-      ffmpeg.FS('unlink', inName);
-      if (narrationFileName) ffmpeg.FS('unlink', narrationFileName);
+      const outData = await ffmpeg.readFile(outName);
+      addLog(`Scene ${scene.scene_number} processed ✓ (${(outData.byteLength / 1024 / 1024).toFixed(2)} MB)`, 'ok');
+      await ffmpeg.deleteFile(inName);
+      if (narrationFileName) await ffmpeg.deleteFile(narrationFileName);
       clips.push(outName);
       setSceneStatus(scene.scene_number, 'done');
       addLog(`Scene ${scene.scene_number} processed ✓`);
@@ -1262,17 +1264,17 @@ async function startAssembly() {
   // Concat
   const listContent = clips.map(c => `file '${c}'`).join('\n');
   addLog('Concatenation list:\n' + listContent, 'info');
-  ffmpeg.FS('writeFile', 'list.txt', new TextEncoder().encode(listContent));
+  await ffmpeg.writeFile('list.txt', new TextEncoder().encode(listContent));
 
   // Verify files exist in FS
-  const fsFiles = ffmpeg.FS('readdir', '/');
-  addLog('Files in FFmpeg FS: ' + fsFiles.join(', '), 'info');
+  const fsFiles = await ffmpeg.listDir('/');
+  addLog('Files in FFmpeg FS: ' + fsFiles.map(f => f.name).join(', '), 'info');
 
   try {
-    await ffmpeg.run(
+    await ffmpeg.exec([
       '-f', 'concat', '-safe', '0', '-i', 'list.txt',
       '-c', 'copy', 'merged.mp4'
-    );
+    ]);
 
     let finalFile = 'merged.mp4';
 
@@ -1280,23 +1282,23 @@ async function startAssembly() {
     if (isBgMusicEnabled) {
       setProgress(90, 'Mixing background music...');
       addLog('Mixing background music...');
-      await ffmpeg.run(
+      await ffmpeg.exec([
         '-i', 'merged.mp4',
         '-filter_complex', 'amovie=bg_music.mp3:loop=0,volume=0.15[bg];[0:a][bg]amix=inputs=2:duration=first[a]',
         '-map', '0:v:0', '-map', '[a]',
         '-c:v', 'copy', '-c:a', 'aac', '-b:a', '128k',
         'final.mp4'
-      );
+      ]);
       finalFile = 'final.mp4';
     } else {
-      // If no music, just rename merged to final
-      ffmpeg.FS('rename', 'merged.mp4', 'final.mp4');
+      // If no music, just use merged
+      finalFile = 'merged.mp4';
     }
 
     setProgress(95, 'Finalizing...');
     addLog('Finalizing output...');
 
-    const output = ffmpeg.FS('readFile', 'final.mp4');
+    const output = await ffmpeg.readFile(finalFile);
     const blob = new Blob([output.buffer], { type: 'video/mp4' });
     const url = URL.createObjectURL(blob);
     const sizeMB = (blob.size / 1024 / 1024).toFixed(1);
@@ -1312,8 +1314,8 @@ async function startAssembly() {
     document.getElementById('result-card').classList.add('visible');
 
     // Cleanup
-    clips.forEach(c => { try { ffmpeg.FS('unlink', c); } catch(e){} });
-    try { ffmpeg.FS('unlink', 'final.mp4'); ffmpeg.FS('unlink', 'list.txt'); } catch(e){}
+    for (const c of clips) { try { await ffmpeg.deleteFile(c); } catch(e){} }
+    try { await ffmpeg.deleteFile(finalFile); await ffmpeg.deleteFile('list.txt'); } catch(e){}
 
   } catch(e) {
     addLog('Concat failed: ' + e.message, 'error');
@@ -1321,7 +1323,7 @@ async function startAssembly() {
     // Fallback: let user download individual clips
     for (let i = 0; i < clips.length; i++) {
       try {
-        const clip = ffmpeg.FS('readFile', clips[i]);
+        const clip = await ffmpeg.readFile(clips[i]);
         const blob = new Blob([clip.buffer], { type: 'video/mp4' });
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
